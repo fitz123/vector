@@ -211,6 +211,7 @@ impl FileWatcher {
 
         let reader = &mut self.reader;
         let initial_position = self.file_position;
+        let delim_len = self.line_delimiter.len() as u64;
 
         loop {
             match read_until_with_max_size(
@@ -230,10 +231,7 @@ impl FileWatcher {
                 Ok(None) => {
                     if !self.file_findable() {
                         self.set_dead();
-                        // File has been deleted, so return what we have in the buffer, even though it
-                        // didn't end with a newline.
                         if self.buf.is_empty() {
-                            // EOF
                             self.reached_eof = true;
                             return Ok(None);
                         } else {
@@ -245,10 +243,8 @@ impl FileWatcher {
                             }));
                         }
                     } else {
-                        // We've reached the end of the available data, but the file is still findable.
-                        // We'll return None and try again next time.
-                        self.file_position = initial_position; // Reset the position
-                        self.buf.clear(); // Clear the buffer for the next attempt
+                        self.file_position = initial_position;
+                        self.buf.clear();
                         return Ok(None);
                     }
                 }
