@@ -4,8 +4,6 @@ use bstr::Finder;
 use bytes::BytesMut;
 use tracing::warn;
 
-use crate::FilePosition;
-
 /// Read up to `max_size` bytes from `reader`, splitting by `delim`
 ///
 /// The function reads up to `max_size` bytes from `reader`, splitting the input
