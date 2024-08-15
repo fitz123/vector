@@ -221,7 +221,7 @@ impl FileWatcher {
                 self.max_line_bytes,
             ) {
                 Ok(Some(n)) => {
-                    self.file_position += n as u64;
+                    self.file_position += n as u64 + delim_len;
                     self.track_read_success();
                     return Ok(Some(RawLine {
                         offset: initial_position,
