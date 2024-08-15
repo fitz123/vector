@@ -212,19 +212,22 @@ impl FileWatcher {
         let reader = &mut self.reader;
         let initial_position = self.file_position;
         let mut bytes_read = 0;
-        let mut found_delimiter = false;
 
         loop {
             match read_until_with_max_size(
                 reader,
-                &mut bytes_read,
+                &mut self.file_position,
                 self.line_delimiter.as_ref(),
                 &mut self.buf,
                 self.max_line_bytes,
             ) {
-                Ok(Some(_)) => {
-                    found_delimiter = true;
-                    break;
+                Ok(Some(n)) => {
+                    bytes_read += n;
+                    self.track_read_success();
+                    return Ok(Some(RawLine {
+                        offset: initial_position,
+                        bytes: self.buf.split().freeze(),
+                    }));
                 }
                 Ok(None) => {
                     if !self.file_findable() {
@@ -236,10 +239,17 @@ impl FileWatcher {
                             self.reached_eof = true;
                             return Ok(None);
                         } else {
-                            break;
+                            self.file_position = initial_position + bytes_read as u64;
+                            return Ok(Some(RawLine {
+                                offset: initial_position,
+                                bytes: self.buf.split().freeze(),
+                            }));
                         }
                     } else {
-                        self.reached_eof = true;
+                        // We've reached the end of the available data, but the file is still findable.
+                        // We'll return None and try again next time.
+                        self.file_position = initial_position; // Reset the position
+                        self.buf.clear(); // Clear the buffer for the next attempt
                         return Ok(None);
                     }
                 }
@@ -250,17 +260,6 @@ impl FileWatcher {
                     return Err(e);
                 }
             }
-        }
-
-        if found_delimiter || !self.file_findable() {
-            self.track_read_success();
-            self.file_position += bytes_read as u64;
-            Ok(Some(RawLine {
-                offset: initial_position,
-                bytes: self.buf.split().freeze(),
-            }))
-        } else {
-            Ok(None)
         }
     }
 

@@ -40,7 +40,6 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
     let mut discarding = false;
     let delim_finder = Finder::new(delim);
     let delim_len = delim.len();
-    let initial_position = *position;
 
     loop {
         let available: &[u8] = match reader.fill_buf() {
@@ -79,7 +78,6 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
 
         if done {
             if !discarding {
-                *position = initial_position + total_read as u64;
                 return Ok(Some(total_read));
             } else {
                 discarding = false;
