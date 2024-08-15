@@ -211,18 +211,16 @@ impl FileWatcher {
 
         let reader = &mut self.reader;
         let initial_position = self.file_position;
-        let mut bytes_read = 0;
 
         loop {
             match read_until_with_max_size(
                 reader,
-                &mut self.file_position,
                 self.line_delimiter.as_ref(),
                 &mut self.buf,
                 self.max_line_bytes,
             ) {
                 Ok(Some(n)) => {
-                    bytes_read += n;
+                    self.file_position += n as u64;
                     self.track_read_success();
                     return Ok(Some(RawLine {
                         offset: initial_position,
@@ -239,6 +237,7 @@ impl FileWatcher {
                             self.reached_eof = true;
                             return Ok(None);
                         } else {
+                            let bytes_read = self.buf.len();
                             self.file_position = initial_position + bytes_read as u64;
                             return Ok(Some(RawLine {
                                 offset: initial_position,
