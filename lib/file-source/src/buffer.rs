@@ -40,6 +40,8 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
     let mut discarding = false;
     let delim_finder = Finder::new(delim);
     let delim_len = delim.len();
+    let initial_position = *position;
+
     loop {
         let available: &[u8] = match reader.fill_buf() {
             Ok(n) => n,
@@ -51,7 +53,7 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
             match delim_finder.find(available) {
                 Some(i) => {
                     if !discarding {
-                        buf.extend_from_slice(&available[..i]);
+                        buf.extend_from_slice(&available[..i + delim_len]);
                     }
                     (true, i + delim_len)
                 }
@@ -64,7 +66,6 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
             }
         };
         reader.consume(used);
-        *position += used as u64; // do this at exactly same time
         total_read += used;
 
         if !discarding && buf.len() > max_size {
@@ -73,20 +74,18 @@ pub fn read_until_with_max_size<R: BufRead + ?Sized>(
                 internal_log_rate_limit = true
             );
             discarding = true;
+            buf.clear();
         }
 
         if done {
             if !discarding {
+                *position = initial_position + total_read as u64;
                 return Ok(Some(total_read));
             } else {
                 discarding = false;
                 buf.clear();
             }
         } else if used == 0 {
-            // We've hit EOF but not yet seen a newline. This can happen when unlucky timing causes
-            // us to observe an incomplete write. We return None here and let the loop continue
-            // next time the method is called. This is safe because the buffer is specific to this
-            // FileWatcher.
             return Ok(None);
         }
     }

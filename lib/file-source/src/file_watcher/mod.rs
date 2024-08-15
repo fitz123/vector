@@ -210,50 +210,57 @@ impl FileWatcher {
         self.track_read_attempt();
 
         let reader = &mut self.reader;
-        let file_position = &mut self.file_position;
-        let initial_position = *file_position;
-        match read_until_with_max_size(
-            reader,
-            file_position,
-            self.line_delimiter.as_ref(),
-            &mut self.buf,
-            self.max_line_bytes,
-        ) {
-            Ok(Some(_)) => {
-                self.track_read_success();
-                Ok(Some(RawLine {
-                    offset: initial_position,
-                    bytes: self.buf.split().freeze(),
-                }))
-            }
-            Ok(None) => {
-                if !self.file_findable() {
-                    self.set_dead();
-                    // File has been deleted, so return what we have in the buffer, even though it
-                    // didn't end with a newline. This is not a perfect signal for when we should
-                    // give up waiting for a newline, but it's decent.
-                    let buf = self.buf.split().freeze();
-                    if buf.is_empty() {
-                        // EOF
-                        self.reached_eof = true;
-                        Ok(None)
+        let initial_position = self.file_position;
+        let mut bytes_read = 0;
+        let mut found_delimiter = false;
+
+        loop {
+            match read_until_with_max_size(
+                reader,
+                &mut bytes_read,
+                self.line_delimiter.as_ref(),
+                &mut self.buf,
+                self.max_line_bytes,
+            ) {
+                Ok(Some(_)) => {
+                    found_delimiter = true;
+                    break;
+                }
+                Ok(None) => {
+                    if !self.file_findable() {
+                        self.set_dead();
+                        // File has been deleted, so return what we have in the buffer, even though it
+                        // didn't end with a newline.
+                        if self.buf.is_empty() {
+                            // EOF
+                            self.reached_eof = true;
+                            return Ok(None);
+                        } else {
+                            break;
+                        }
                     } else {
-                        Ok(Some(RawLine {
-                            offset: initial_position,
-                            bytes: buf,
-                        }))
+                        self.reached_eof = true;
+                        return Ok(None);
                     }
-                } else {
-                    self.reached_eof = true;
-                    Ok(None)
+                }
+                Err(e) => {
+                    if let io::ErrorKind::NotFound = e.kind() {
+                        self.set_dead();
+                    }
+                    return Err(e);
                 }
             }
-            Err(e) => {
-                if let io::ErrorKind::NotFound = e.kind() {
-                    self.set_dead();
-                }
-                Err(e)
-            }
+        }
+
+        if found_delimiter || !self.file_findable() {
+            self.track_read_success();
+            self.file_position += bytes_read as u64;
+            Ok(Some(RawLine {
+                offset: initial_position,
+                bytes: self.buf.split().freeze(),
+            }))
+        } else {
+            Ok(None)
         }
     }
 
